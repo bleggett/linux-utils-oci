@@ -1,0 +1,18 @@
+FROM alpine:latest AS build
+ARG SQUASHFS_TOOLS_VERSION=4.6.1
+WORKDIR /usr/src
+
+# build dependencies
+RUN apk update && apk add build-base git zlib-dev zlib-static zstd-dev zstd-static lz4-dev lz4-static
+
+# check out xen sources
+ENV SQUASHFS_TOOLS_VERSION=${SQUASHFS_TOOLS_VERSION}
+RUN git clone https://github.com/plougher/squashfs-tools && cd squashfs-tools && git checkout squashfs-tools-$SQUASHFS_TOOLS_VERSION
+WORKDIR /usr/src/squashfs-tools/squashfs-tools
+ENV CFLAGS="-O2 -Wall -static"
+ENV LDFLAGS="-static"
+RUN make -j`nproc` && make install INSTALL_DIR=/usr/obj/usr/bin
+
+## copy final oxenstored into a scratch image
+FROM scratch AS final
+COPY --from=build /usr/obj/ /
