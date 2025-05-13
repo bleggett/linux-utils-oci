@@ -1,8 +1,6 @@
 name: nightly
 on:
   workflow_dispatch:
-  schedule:
-  - cron: "0 10 * * *"
 permissions:
   contents: read
   packages: write
@@ -15,6 +13,7 @@ jobs:
       matrix:
         component:
         - squashfs-tools
+        - mkfs
     name: oci build ${{ matrix.component }}
     steps:
     - uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1

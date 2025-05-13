@@ -1,0 +1,22 @@
+FROM alpine:latest AS build
+WORKDIR /usr/src
+
+# build dependencies
+RUN apk update && apk add build-base linux-headers autoconf gettext-dev automake flex bison libtool git
+
+ARG REPO=https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git
+
+RUN E2FS_LATEST_VER=$(git -c 'versionsort.suffix=-' \
+    ls-remote --exit-code --refs --sort='version:refname' --tags $REPO '*.*.*' \
+    | tail -n 1 \
+    | cut -d '/' -f 3) && \
+    git clone https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git --branch $E2FS_LATEST_VER
+
+ENV CFLAGS="-O2 -Wall -static"
+ENV LDFLAGS="--static"
+WORKDIR /usr/src/e2fsprogs
+RUN mkdir build
+RUN cd build && ../configure && make -j`nproc`
+
+FROM scratch AS final
+COPY --from=build /usr/src/e2fsprogs/build/misc/mke2fs /mkfs.ext4
