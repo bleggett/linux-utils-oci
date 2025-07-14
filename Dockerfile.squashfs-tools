@@ -1,16 +1,36 @@
 FROM alpine:latest AS build
-ARG SQUASHFS_TOOLS_VERSION=4.6.1
+# We would be fine using 4.7 (latest) except for needing
+# https://github.com/plougher/squashfs-tools/pull/314
+# for Alpine builds to work
+ARG SQUASHFS_TOOLS_VERSION=65362f488c8859db6612a1ed3630c7352fff2a7e
 WORKDIR /usr/src
 
 # build dependencies
-RUN apk update && apk add build-base git zlib-dev zlib-static zstd-dev zstd-static lz4-dev lz4-static
+RUN apk update && apk add build-base cmake git sed
+# build zlib-ng in static lib/"zlib-compat" mode (alpine doesn't have a static/dev variant yet)
+ENV ZLIB_NG_VERSION=2.2.4
+RUN git clone https://github.com/zlib-ng/zlib-ng.git && cd zlib-ng && git checkout $ZLIB_NG_VERSION
+WORKDIR /usr/src/zlib-ng
+RUN cmake . -DZLIB_COMPAT=1
+RUN cmake --build . --config Release
+RUN cmake --build . --target install
 
 # check out squashfs-tools sources
+WORKDIR /usr/src
 ENV SQUASHFS_TOOLS_VERSION=${SQUASHFS_TOOLS_VERSION}
-RUN git clone https://github.com/plougher/squashfs-tools && cd squashfs-tools && git checkout squashfs-tools-$SQUASHFS_TOOLS_VERSION
+RUN git clone https://github.com/plougher/squashfs-tools && cd squashfs-tools && git checkout $SQUASHFS_TOOLS_VERSION
 WORKDIR /usr/src/squashfs-tools/squashfs-tools
+# We don't use most of these libs, so turn them off.
+RUN sed -i \
+    -e 's/LZO_SUPPORT = 1/LZO_SUPPORT = 0/' \
+    -e 's/XZ_SUPPORT = 1/XZ_SUPPORT = 0/' \
+    -e 's/ZSTD_SUPPORT = 1/ZSTD_SUPPORT = 0/' \
+    -e 's/LZ4_SUPPORT = 1/LZ4_SUPPORT = 0/' \
+    -e 's/USE_PREBUILT_MANPAGES = n/USE_PREBUILT_MANPAGES = y/' \
+    Makefile
 ENV CFLAGS="-O2 -Wall -static"
 ENV LDFLAGS="-static"
+
 RUN make -j`nproc` && make install INSTALL_DIR=/usr/obj/usr/bin
 
 ## copy final squashfs-tools into a scratch image
